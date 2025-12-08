@@ -1,0 +1,5 @@
+gymnasium==1.0.0
+mlagents_envs==0.26.0
+numpy==1.21.2
+stable_baselines3
+tensorboard
