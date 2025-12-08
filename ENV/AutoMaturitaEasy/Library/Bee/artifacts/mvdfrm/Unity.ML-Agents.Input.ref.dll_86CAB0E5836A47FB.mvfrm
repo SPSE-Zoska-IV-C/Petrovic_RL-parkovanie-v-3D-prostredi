@@ -1,0 +1,14 @@
+ButtonInputActionAdaptor
+Unity
+MLAgents
+Extensions
+Input
+DoubleInputActionAdaptor
+FloatInputActionAdaptor
+IntegerInputActionAdaptor
+Vector2InputActionAdaptor
+IInputActionAssetProvider
+InputActionActuator
+InputActuatorComponent
+InputActuatorEventContext
+IRLActionInputAdaptor
