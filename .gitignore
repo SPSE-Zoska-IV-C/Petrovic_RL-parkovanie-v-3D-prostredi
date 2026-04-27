@@ -98,6 +98,7 @@ InitTestScene*.unity*
 # Auto-generated scenes by play mode tests
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 ENV/AutoMaturitaEasy/.vscode/*
+ENV/**/.vscode/*
 
 
 ENV/AutoMaturitaEasy/Library/PackageCache/*
@@ -120,5 +121,5 @@ ENV/**/[Bb]uilds/
 .venv/
 venv/
 
-# Nested standalone repo (avoid broken gitlink in this repo)
-ENV/AutoMaurita/
+# Local Python env stored inside Unity project folders
+ENV/**/Maturita/
