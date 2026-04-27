@@ -119,3 +119,6 @@ ENV/**/[Bb]uilds/
 *.py[cod]
 .venv/
 venv/
+
+# Nested standalone repo (avoid broken gitlink in this repo)
+ENV/AutoMaurita/
