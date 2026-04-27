@@ -5,8 +5,8 @@ using System.Collections.Generic;
 public class CarController : MonoBehaviour
 {
     [Header("Engine / Steering")]
-    public float maxEngineTorque = 1500f;     // Nm (forward)
-    public float maxReverseTorque = 800f;     // Nm (reverse)
+    public float maxEngineTorque = 1500f;     
+    public float maxReverseTorque = 800f;     
     public float maxBrakeTorque = 3000f;
     public float maxHandbrakeTorque = 6000f;
     public float maxSteeringAngle = 30f;
@@ -22,22 +22,21 @@ public class CarController : MonoBehaviour
         [Header("Behaviors")]
         public bool steering = false;
         public bool traction = false;
-        public bool brake = false;
-        public bool handbrake = false;
+        public bool brake = false;      
+        public bool handbrake = false;  
     }
 
     public List<WheelSetup> wheels = new List<WheelSetup>();
 
     [Header("Input (default)")]
-    public string verticalAxis = "Vertical";   // throttle (+) / reverse (-)
+    public string verticalAxis = "Vertical";   
     public string horizontalAxis = "Horizontal";
     public KeyCode handbrakeKey = KeyCode.Space;
 
-    // New: allow agent control
     [Header("Agent Control")]
-    public bool useAgentControl = true; // false = player input, true = agent control
-    private float agentSteerInput = 0f;  // -1..+1
-    private float agentThrottleInput = 0f; // -1..+1 (negative => reverse)
+    public bool useAgentControl = true; 
+    private float agentSteerInput = 0f;  
+    private float agentThrottleInput = 0f; 
     private bool agentHandbrake = false;
 
     private Rigidbody rb;
@@ -57,12 +56,11 @@ public class CarController : MonoBehaviour
         }
     }
 
-    // Public API for the Agent to set controls
     public void SetControls(float steer /*-1..1*/, float throttle /*-1..1*/, bool handbrake)
     {
-        agentSteerInput = Mathf.Clamp(steer, -1f, 1f);
-        agentThrottleInput = Mathf.Clamp(throttle, -1f, 1f);
-        agentHandbrake = handbrake;
+    agentSteerInput = Mathf.Clamp(steer, -1f, 1f);
+    agentThrottleInput = Mathf.Clamp(throttle, -1f, 1f);
+    agentHandbrake = false;
     }
 
     void FixedUpdate()
@@ -84,49 +82,57 @@ public class CarController : MonoBehaviour
             handbrakeOn = Input.GetKey(handbrakeKey);
         }
 
-        // Count traction wheels
         int tractionCount = 0;
         foreach (var w in wheels)
             if (w.traction && w.wheelCollider != null) tractionCount++;
 
-        // Determine total motor torque (preserve sign)
         float motorTotal;
         if (v >= 0f)
-            motorTotal = v * maxEngineTorque;        // forward
+            motorTotal = v * maxEngineTorque;       
         else
-            motorTotal = v * maxReverseTorque;       // reverse
+            motorTotal = v * maxReverseTorque;       
 
         float motorPerWheel = tractionCount > 0 ? motorTotal / tractionCount : 0f;
+
+        float forwardVel = Vector3.Dot(rb.linearVelocity, transform.forward);
 
         foreach (var w in wheels)
         {
             if (w.wheelCollider == null) continue;
 
-            // Steering
             if (w.steering)
             {
                 w.wheelCollider.steerAngle = maxSteeringAngle * h;
             }
 
-            // Motor torque
+            float brakeTorque = 0f;
+            if (handbrakeOn && w.handbrake)
+            {
+                brakeTorque = Mathf.Max(brakeTorque, maxHandbrakeTorque);
+            }
+
+            if (w.brake)
+            {
+                if (Mathf.Abs(v) > 0.01f && Mathf.Sign(forwardVel) != 0f && Mathf.Sign(v) != Mathf.Sign(forwardVel))
+                {
+                    brakeTorque = Mathf.Max(brakeTorque, Mathf.Abs(v) * maxBrakeTorque);
+                }
+            }
+
             if (w.traction)
             {
-                w.wheelCollider.motorTorque = motorPerWheel;
+                if (brakeTorque > 0.0f)
+                    w.wheelCollider.motorTorque = 0f;
+                else
+                    w.wheelCollider.motorTorque = motorPerWheel;
             }
             else
             {
                 w.wheelCollider.motorTorque = 0f;
             }
 
-            // Braking
-            float brakeTorque = 0f;
-            if (handbrakeOn && w.handbrake)
-            {
-                brakeTorque = Mathf.Max(brakeTorque, maxHandbrakeTorque);
-            }
             w.wheelCollider.brakeTorque = brakeTorque;
 
-            // Visual sync
             if (w.wheelMesh != null)
             {
                 Vector3 pos;

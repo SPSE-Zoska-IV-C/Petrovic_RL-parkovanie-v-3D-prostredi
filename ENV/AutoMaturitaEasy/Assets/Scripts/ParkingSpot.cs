@@ -4,13 +4,13 @@ using UnityEngine;
 public class ParkingSpot : MonoBehaviour
 {
     [Header("Assign in Inspector")]
-    public Collider spotTrigger;     // the Box Collider (set IsTrigger = true)
+    public Collider spotTrigger;
 
-    [HideInInspector] public bool isGoal = false;      // becomes true AFTER successful stay
-    [HideInInspector] public bool isAssigned = false;  // set by ParkingManager when this spot is the chosen target
+    [HideInInspector] public bool isGoal = false;
+    [HideInInspector] public bool isAssigned = false;
 
     [Tooltip("Seconds the player must remain fully inside the trigger before completing the goal")]
-    public float requiredStaySeconds = 2f; // CHANGED: reduced for easier learning
+    public float requiredStaySeconds = 2f;
 
     [Tooltip("Enable to get debug logs (throttle applied). Disable in release to avoid allocations/log spam).")]
     public bool debugLogs = true;
@@ -22,18 +22,15 @@ public class ParkingSpot : MonoBehaviour
     [Tooltip("If true and running inside the Editor, stop Play Mode when the goal is reached.")]
     public bool stopEditorPlayMode = false;
 
-    // runtime tracking state (no allocations inside physics callbacks)
     private GameObject trackingRoot = null;
     private Collider[] trackingColliders = null;
     private float accumulatedInsideTime = 0f;
     private float lastProgressLogTime = 0f;
     private const float PROGRESS_LOG_INTERVAL = 1f;
 
-    // saved time settings for resume
     private float savedTimeScale = 1f;
     private float savedFixedDeltaTime = 0.02f;
 
-    // -------- lifecycle --------
     public void ResetSpot()
     {
         isGoal = false;
@@ -43,13 +40,10 @@ public class ParkingSpot : MonoBehaviour
         if (spotTrigger != null)
             spotTrigger.enabled = false;
 
-        // restore time/audio if we paused the game previously
         ResumeGame();
 
         if (debugLogs) Debug.Log($"[PS] ResetSpot: {gameObject.name}");
     }
-
-    // -------- physics callbacks (cheap, allocation-free) --------
 
     private void OnTriggerEnter(Collider other)
     {
@@ -117,8 +111,6 @@ public class ParkingSpot : MonoBehaviour
         }
     }
 
-    // -------- helpers (no allocations) --------
-
     private GameObject ResolveRoot(Collider other)
     {
         return (other.attachedRigidbody != null) ? other.attachedRigidbody.gameObject : other.transform.root.gameObject;
@@ -129,7 +121,6 @@ public class ParkingSpot : MonoBehaviour
         GameObject root = ResolveRoot(other);
         if (root == null) return false;
 
-        // Check for Player tag or Rigidbody (the car agent)
         if (root.CompareTag("Player")) return true;
         if (other.attachedRigidbody != null) return true;
 
@@ -180,7 +171,7 @@ public class ParkingSpot : MonoBehaviour
 
     private void CompleteGoal(GameObject byObject)
     {
-        if (!isAssigned) return; // extra safety
+        if (!isAssigned) return;
 
         isGoal = true;
         isAssigned = false;
@@ -188,7 +179,7 @@ public class ParkingSpot : MonoBehaviour
         if (spotTrigger != null)
             spotTrigger.enabled = false;
 
-        if (debugLogs) Debug.Log($"[PS] >>> GOAL ACHIEVED: {gameObject.name} by {byObject.name} <<< (isGoal set true)");
+        if (debugLogs) Debug.Log($"[PS] >>> GOAL ACHIEVED: {gameObject.name} by {byObject.name} <<<");
 
         StopTracking();
 
@@ -200,22 +191,19 @@ public class ParkingSpot : MonoBehaviour
             {
                 rb.linearVelocity = Vector3.zero;
                 rb.angularVelocity = Vector3.zero;
-                rb.isKinematic = false; // ensure physics is on for the next episode
+                rb.isKinematic = false;
             }
 
-            // Signal episode end once: ParkingSpot is the owner.
-            agent.EndEpisode();
+            // CRITICAL FIX: Signal goal completion explicitly
+            agent.SignalGoalAchieved();
         }
     }
 
-    // Minimal pause/resume helpers
     private void PauseGame()
     {
-        // Save current time settings
         savedTimeScale = Time.timeScale;
         savedFixedDeltaTime = Time.fixedDeltaTime;
 
-        // Pause gameplay
         Time.timeScale = 0f;
         Time.fixedDeltaTime = 0f;
         AudioListener.pause = true;
@@ -230,7 +218,6 @@ public class ParkingSpot : MonoBehaviour
 
     private void ResumeGame()
     {
-        // Restore time/audio
         Time.timeScale = savedTimeScale;
         Time.fixedDeltaTime = savedFixedDeltaTime;
         AudioListener.pause = false;

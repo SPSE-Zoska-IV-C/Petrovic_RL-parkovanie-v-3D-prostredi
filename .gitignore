@@ -102,3 +102,20 @@ ENV/AutoMaturitaEasy/.vscode/*
 
 ENV/AutoMaturitaEasy/Library/PackageCache/*
 ENV/AutoMaturitaEasy/Library/Artifacts/*
+
+# Unity project is nested under ENV/, so ignore generated folders there too.
+ENV/**/[Ll]ibrary/
+ENV/**/[Tt]emp/
+ENV/**/[Oo]bj/
+ENV/**/[Ll]ogs/
+ENV/**/[Uu]ser[Ss]ettings/
+ENV/**/[Mm]emoryCaptures/
+ENV/**/[Rr]ecordings/
+ENV/**/[Bb]uild/
+ENV/**/[Bb]uilds/
+
+# Python caches and virtual environments
+**/__pycache__/
+*.py[cod]
+.venv/
+venv/

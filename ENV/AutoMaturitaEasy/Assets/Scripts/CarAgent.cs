@@ -1,4 +1,3 @@
-
 using UnityEngine;
 using Unity.MLAgents;
 using Unity.MLAgents.Sensors;
@@ -29,42 +28,47 @@ public class CarAgent : Agent
 
     [Header("Episode Limits")]
     [Tooltip("Maximum steps before episode ends (0 = unlimited). Recommended: 3072 for easy environment")]
-    public int maxEpisodeSteps = 3072; // UPDATED: Increased from 2048
+    public int maxEpisodeSteps = 3072;
 
-    // internal
-    private float insideGoalTimer = 0f;
-    private bool isInsideGoal = false;
     private Vector3 startPosition;
     private Quaternion startRotation;
     private ParkingManager pmCache = null;
     private int currentStepCount = 0;
+    
+    // CRITICAL: Track whether goal was achieved this episode
+    private bool goalAchievedThisEpisode = false;
 
     protected override void Awake()
     {
         base.Awake();
-        
-        // ALWAYS auto-find components (safe for cloning)
+
         if (carController == null) carController = GetComponent<CarController>();
         if (rb == null) rb = GetComponent<Rigidbody>();
-        
-        // Auto-find lidar if not assigned
-        if (lidar == null) lidar = GetComponentInChildren<LidarSensor>();
-        
-        // CRITICAL FIX: Find ParkingManager in THIS environment only
+
+        if (lidar == null)
+        {
+            lidar = GetComponentInChildren<LidarSensor>();
+            if (lidar == null)
+            {
+                lidar = gameObject.AddComponent<LidarSensor>();
+                lidar.rayCount = rayCount;
+                lidar.rayDistance = rayDistance;
+                lidar.obstacleMask = obstacleMask;
+            }
+        }
+
         if (pmCache == null)
         {
-            // First try: look in parent (if agent is under ParkingEnvironment)
             if (transform.parent != null)
             {
                 pmCache = transform.parent.GetComponentInChildren<ParkingManager>();
             }
-            
-            // Fallback: look in children (if ParkingManager is somehow under this agent)
+
             if (pmCache == null)
             {
                 pmCache = GetComponentInChildren<ParkingManager>();
             }
-            
+
             if (pmCache != null)
             {
                 Debug.Log($"[CarAgent {gameObject.name}] Found ParkingManager: {pmCache.gameObject.name}");
@@ -74,7 +78,7 @@ public class CarAgent : Agent
                 Debug.LogWarning($"[CarAgent {gameObject.name}] No ParkingManager found in this environment!");
             }
         }
-        
+
         startPosition = transform.position;
         startRotation = transform.rotation;
     }
@@ -114,11 +118,9 @@ public class CarAgent : Agent
         transform.rotation = startRotation;
 
         StartCoroutine(SafeResetPhysics());
-        insideGoalTimer = 0f;
-        isInsideGoal = false;
 
-        // CRITICAL FIX: Use cached ParkingManager (found in Awake)
-        // This ensures each agent uses its OWN environment's manager
+        goalAchievedThisEpisode = false;
+
         if (pmCache != null)
         {
             pmCache.StartRound();
@@ -141,25 +143,7 @@ public class CarAgent : Agent
         }
         else
         {
-            Vector3 origin = transform.position + transform.TransformVector(new Vector3(0f, 0.25f, 0f));
-            int useRayCount = Mathf.Max(1, rayCount);
-            float angleStep = 360f / useRayCount;
-
-            for (int i = 0; i < useRayCount; ++i)
-            {
-                float angle = i * angleStep;
-                Vector3 dir = Quaternion.Euler(0f, angle, 0f) * transform.forward;
-                RaycastHit hit;
-                if (Physics.Raycast(origin, dir, out hit, rayDistance, obstacleMask, QueryTriggerInteraction.Collide))
-                {
-                    float n = 1f - Mathf.Clamp01(hit.distance / rayDistance);
-                    sensor.AddObservation(n);
-                }
-                else
-                {
-                    sensor.AddObservation(0f);
-                }
-            }
+            sensor.AddObservation(0f);
         }
 
         // 2) Speed
@@ -192,26 +176,24 @@ public class CarAgent : Agent
             sensor.AddObservation(0f);
             sensor.AddObservation(0f);
         }
+
+        //goal achievement flag as observation
+        sensor.AddObservation(goalAchievedThisEpisode ? 1f : 0f);
     }
 
     public override void OnActionReceived(ActionBuffers actions)
     {
-        // Continuous actions expected in order: [steer, throttle, handbrake]
-        // steer: -1 .. +1, throttle: -1 .. +1, handbrake: 0 .. 1
         float steer = 0f;
         float throttle = 0f;
         bool handbrake = false;
 
         if (actions.ContinuousActions.Length >= 1)
-            steer = Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f);
+        steer = Mathf.Clamp(actions.ContinuousActions[0], -1f, 1f);
         if (actions.ContinuousActions.Length >= 2)
-            throttle = Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f);
-        if (actions.ContinuousActions.Length >= 3)
-        {
-            // Interpret handbrake as continuous (0..1), threshold to boolean.
-            float hb = Mathf.Clamp01(actions.ContinuousActions[2]);
-            handbrake = hb >= 0.5f;
-        }
+        throttle = Mathf.Clamp(actions.ContinuousActions[1], -1f, 1f);
+
+        // No handbrake action anymore
+        handbrake = false;
 
         if (carController != null)
             carController.SetControls(steer, throttle, handbrake);
@@ -219,122 +201,28 @@ public class CarAgent : Agent
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        // Output continuous actions so you can test with keyboard.
         var cont = actionsOut.ContinuousActions;
-        // steer: A/D or arrow keys
-        float h = Input.GetAxis("Horizontal");  // -1..1
-        // throttle: W/S or vertical axis
-        float v = Input.GetAxis("Vertical");    // -1..1
-        // handbrake: space -> 1, else 0
-        float hb = Input.GetKey(KeyCode.Space) ? 1f : 0f;
+        float h = Input.GetAxis("Horizontal");
+        float v = Input.GetAxis("Vertical");
 
         if (cont.Length >= 1) cont[0] = Mathf.Clamp(h, -1f, 1f);
         if (cont.Length >= 2) cont[1] = Mathf.Clamp(v, -1f, 1f);
-        if (cont.Length >= 3) cont[2] = Mathf.Clamp01(hb);
-    }
-
-    void OnTriggerEnter(Collider other)
-    {
-        if (other == null) return;
-
-        var spot = other.GetComponentInParent<ParkingSpot>();
-        if (spot != null)
-        {
-            // Use cached pmCache instead of FindFirstObjectByType
-            if (pmCache != null && pmCache.CurrentAssignedSpot == spot)
-            {
-                isInsideGoal = true;
-                insideGoalTimer = 0f;
-                return;
-            }
-
-            if (spot.spotTrigger != null && spot.spotTrigger.enabled)
-            {
-                isInsideGoal = true;
-                insideGoalTimer = 0f;
-                return;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(parkingGoalTag))
-        {
-            try
-            {
-                if (other.CompareTag(parkingGoalTag))
-                {
-                    isInsideGoal = true;
-                    insideGoalTimer = 0f;
-                    return;
-                }
-            }
-            catch (UnityException)
-            {
-                Debug.LogWarning($"CarAgent.OnTriggerEnter: tag '{parkingGoalTag}' not defined.");
-            }
-        }
-    }
-
-    void OnTriggerExit(Collider other)
-    {
-        if (other == null) return;
-
-        var spot = other.GetComponentInParent<ParkingSpot>();
-        if (spot != null)
-        {
-            if (spot.isGoal || (spot.spotTrigger != null && spot.spotTrigger.enabled))
-            {
-                isInsideGoal = false;
-                insideGoalTimer = 0f;
-                return;
-            }
-        }
-
-        if (!string.IsNullOrEmpty(parkingGoalTag))
-        {
-            try
-            {
-                if (other.CompareTag(parkingGoalTag))
-                {
-                    isInsideGoal = false;
-                    insideGoalTimer = 0f;
-                    return;
-                }
-            }
-            catch (UnityException)
-            {
-                Debug.LogWarning($"CarAgent.OnTriggerExit: tag '{parkingGoalTag}' not defined.");
-            }
-        }
-    }
-
-    void Update()
-    {
-        if (isInsideGoal)
-        {
-            insideGoalTimer += Time.deltaTime;
-        }
-        else
-        {
-            if (insideGoalTimer != 0f)
-                insideGoalTimer = 0f;
-        }
+        // no cont[2]
     }
 
     void FixedUpdate()
     {
         RequestDecision();
         currentStepCount++;
-    
+
         if (maxEpisodeSteps > 0 && currentStepCount >= maxEpisodeSteps)
         {
-            Debug.Log($"[CarAgent {gameObject.name}] Episode truncated at {currentStepCount} steps (max: {maxEpisodeSteps})");
-            EndEpisode();
+            Debug.Log($"[CarAgent {gameObject.name}] Episode TIMEOUT at {currentStepCount} steps (max: {maxEpisodeSteps})");
         }
     }
 
     Transform FindActiveGoalTransform()
     {
-        // Use cached ParkingManager instead of finding globally
         if (pmCache != null && pmCache.CurrentAssignedSpot != null)
         {
             if (pmCache.CurrentAssignedSpot.spotTrigger != null)
@@ -343,4 +231,13 @@ public class CarAgent : Agent
         }
         return null;
     }
+
+    public void SignalGoalAchieved()
+    {
+        Debug.Log($"[CarAgent {gameObject.name}] SignalGoalAchieved() called - setting flag and ending episode");
+        goalAchievedThisEpisode = true;
+        
+        EndEpisode();
+    }
 }
+

@@ -1,5 +1,7 @@
+
 using UnityEngine;
 using Unity.MLAgents.Sensors;
+using System.Collections.Generic;
 
 [DisallowMultipleComponent]
 public class LidarSensor : MonoBehaviour
@@ -20,16 +22,26 @@ public class LidarSensor : MonoBehaviour
     [Tooltip("Start angle offset (degrees). 0 = forward, 180 = backward etc.")]
     public float startAngle = 0f;
 
-    /// <summary>
-    /// Adds normalized lidar observations to the provided VectorSensor.
-    /// Call this from your Agent. Each ray contributes one float (0..1).
-    /// </summary>
     public void AddObservations(VectorSensor sensor)
     {
-        Vector3 origin = transform.position + transform.TransformVector(originOffset);
-        float angleStep = 360f / Mathf.Max(1, rayCount);
+        float[] arr = ComputeObservationsArray();
+        for (int i = 0; i < arr.Length; ++i)
+            sensor.AddObservation(arr[i]);
+    }
 
-        for (int i = 0; i < rayCount; ++i)
+    public float[] GetObservationsArray()
+    {
+        return ComputeObservationsArray();
+    }
+
+    private float[] ComputeObservationsArray()
+    {
+        int useRayCount = Mathf.Max(1, rayCount);
+        float[] arr = new float[useRayCount];
+        Vector3 origin = transform.position + transform.TransformVector(originOffset);
+        float angleStep = 360f / useRayCount;
+
+        for (int i = 0; i < useRayCount; ++i)
         {
             float angle = startAngle + i * angleStep;
             Vector3 dir = Quaternion.Euler(0f, angle, 0f) * transform.forward;
@@ -40,15 +52,14 @@ public class LidarSensor : MonoBehaviour
             float obs = 0f;
             if (gotHit)
             {
-                // normalized: 1 when touching, 0 at max distance
-                obs = 1f - Mathf.Clamp01(hit.distance / rayDistance);
+                obs = Mathf.Clamp01(hit.distance / rayDistance);
             }
             else
             {
-                obs = 0f;
+                obs = 1f;
             }
 
-            sensor.AddObservation(obs);
+            arr[i] = obs;
 
             if (debugDraw)
             {
@@ -56,23 +67,7 @@ public class LidarSensor : MonoBehaviour
                 Debug.DrawRay(origin, dir * (gotHit ? hit.distance : rayDistance), c);
             }
         }
-    }
 
-    // Convenience: return float[] if you prefer to process in your Agent
-    public float[] GetObservationsArray()
-    {
-        float[] arr = new float[rayCount];
-        Vector3 origin = transform.position + transform.TransformVector(originOffset);
-        float angleStep = 360f / Mathf.Max(1, rayCount);
-
-        for (int i = 0; i < rayCount; ++i)
-        {
-            float angle = startAngle + i * angleStep;
-            Vector3 dir = Quaternion.Euler(0f, angle, 0f) * transform.forward;
-            RaycastHit hit;
-            bool gotHit = Physics.Raycast(origin, dir, out hit, rayDistance, obstacleMask, triggerInteraction);
-            arr[i] = gotHit ? 1f - Mathf.Clamp01(hit.distance / rayDistance) : 0f;
-        }
         return arr;
     }
 }

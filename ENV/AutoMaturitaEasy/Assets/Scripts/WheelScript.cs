@@ -15,8 +15,6 @@ public class WheelScript : MonoBehaviour
             Debug.LogWarning($"WheelScript on '{name}' has no wheelMesh assigned.");
     }
 
-    // Keep visual in sync every frame (WheelCollider physics are updated in FixedUpdate,
-    // but visuals are fine to update in Update).
     void Update()
     {
         if (wheelMesh == null || wc == null) return;
@@ -27,7 +25,6 @@ public class WheelScript : MonoBehaviour
         wheelMesh.rotation = rot;
     }
 
-    // Helper methods (optional) if you want to call from code:
     public void ApplySteer(float angle) => wc.steerAngle = angle;
     public void ApplyMotorTorque(float torque) => wc.motorTorque = torque;
     public void ApplyBrakeTorque(float torque) => wc.brakeTorque = torque;
